@@ -7,8 +7,10 @@ import {
   runInAction,
 } from "mobx";
 import { createContext, SyntheticEvent } from "react";
+import { toast } from "react-toastify";
+import { history } from "../..";
 import agent from "../api/agent";
-import { IActivity } from "../models/activity";
+import { IActivity, IActivityFormValues } from "../models/activity";
 
 configure({ enforceActions: "always" });
 
@@ -29,7 +31,7 @@ class ActivityStore {
     });
   }
   loadingInitial = false;
-  activity: IActivity | null = null;
+  activity: IActivityFormValues | null = null;
   submitting = false;
   activityRegistery = new Map();
   target = "";
@@ -42,11 +44,11 @@ class ActivityStore {
 
   groupActivitiesByDate(activities: IActivity[]) {
     const sortedActivities = activities.sort(
-      (a, b) => Date.parse(a.date) - Date.parse(b.date)
+      (a, b) => a.date!.getTime() - b.date!.getDate()
     );
     return Object.entries(
       sortedActivities.reduce((activities, activity) => {
-        const date = activity.date.split("T")[0];
+        const date = activity.date!.toISOString().split("T")[0];
         activities[date] = activities[date]
           ? [...activities[date], activity]
           : [activity];
@@ -62,7 +64,7 @@ class ActivityStore {
       const activities = await agent.Activities.list();
       runInAction(() => {
         activities.forEach((activity) => {
-          activity.date = activity.date.split(".")[0];
+          activity.date = new Date(activity.date!);
           this.activityRegistery.set(activity.id, activity);
         });
         this.loadingInitial = false;
@@ -79,12 +81,15 @@ class ActivityStore {
     let activity = this.getActivity(id);
     if (activity) {
       this.activity = activity;
+      return activity;
     } else {
       this.loadingInitial = true;
       try {
         activity = await agent.Activities.details(id);
         runInAction(() => {
+          activity.date = new Date(activity.date);
           this.activity = activity;
+          this.activityRegistery.set(activity.id, activity);
           this.loadingInitial = false;
         });
       } catch (error) {
@@ -106,14 +111,15 @@ class ActivityStore {
       await agent.Activities.create(activity);
       runInAction(() => {
         this.activityRegistery.set(activity.id, activity);
-
         this.submitting = false;
       });
+      history.push(`/activities/${activity.id}`);
     } catch (error) {
       runInAction(() => {
         this.submitting = false;
       });
-      console.log(error);
+      toast.error("problem submitting data");
+      console.log(error.response);
     }
   };
 
@@ -126,12 +132,13 @@ class ActivityStore {
         this.activity = activity;
         this.submitting = false;
       });
+      history.push(`/activities/${activity.id}`);
     } catch (error) {
       runInAction(() => {
         this.submitting = false;
       });
-
-      console.log(error);
+      toast.error("problem submitting data");
+      console.log(error.response);
     }
   };
 
